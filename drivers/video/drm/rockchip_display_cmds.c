@@ -6,6 +6,7 @@
 #include <asm/unaligned.h>
 #include <config.h>
 #include <common.h>
+#include <console.h>
 #include <errno.h>
 #include <linux/media-bus-format.h>
 #include <malloc.h>
@@ -17,6 +18,8 @@
 #include <dm/uclass.h>
 #include <dm/uclass-internal.h>
 #include <fat.h>
+#include <key.h>
+#include <environment.h>
 
 /*----------------------------------------------------------------------------*/
 #include "rockchip_display.h"
@@ -27,6 +30,133 @@
 /*----------------------------------------------------------------------------*/
 struct lcd *lcd = NULL;
 
+
+/*------------------------MY CODE---------------------------*/
+
+int gpio_request(unsigned gpio, const char *label);
+int gpio_direction_input(unsigned gpio);
+int gpio_get_value(unsigned gpio);
+
+
+#define R36S_GPIO_UP     (32 + 12) /* b12 */
+#define R36S_GPIO_RIGHT  (32 + 15) /* b15 */
+#define R36S_GPIO_DOWN   (32 + 13) /* b13 */
+#define R36S_GPIO_LEFT   (32 + 14) /* b14 */
+#define R36S_GPIO_X      (32 + 7)  /* b7  */
+#define R36S_GPIO_A      (32 + 2)  /* b2  */
+#define R36S_GPIO_B      (32 + 5)  /* b5  */
+#define R36S_GPIO_Y      (32 + 6)  /* b6  */
+
+static const struct {
+	unsigned gpio;
+	const char *name;
+} r36s_keys[] = {
+	{ R36S_GPIO_UP, "u" },
+	{ R36S_GPIO_DOWN, "d" },
+	{ R36S_GPIO_LEFT, "l" },
+	{ R36S_GPIO_RIGHT, "r" },
+	{ R36S_GPIO_A, "a" },
+	{ R36S_GPIO_B, "b" },
+	{ R36S_GPIO_X, "x" },
+	{ R36S_GPIO_Y, "y" },
+};
+
+static int r36s_any_key_down(void)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(r36s_keys); i++) {
+		if (gpio_get_value(r36s_keys[i].gpio) == 0)
+			return 1;
+	}
+
+	return 0;
+}
+
+static int do_r36s_waitkey(cmd_tbl_t *cmdtp, int flag, int argc,
+			   char * const argv[])
+{
+	int i;
+
+	if (argc != 2)
+		return CMD_RET_USAGE;
+
+	for (i = 0; i < ARRAY_SIZE(r36s_keys); i++) {
+		gpio_request(r36s_keys[i].gpio, r36s_keys[i].name);
+		gpio_direction_input(r36s_keys[i].gpio);
+	}
+
+	while (1) {
+		for (i = 0; i < ARRAY_SIZE(r36s_keys); i++) {
+			if (gpio_get_value(r36s_keys[i].gpio) == 0) {
+				env_set(argv[1], r36s_keys[i].name);
+
+				while (r36s_any_key_down())
+					mdelay(30);
+
+				mdelay(80);
+				return CMD_RET_SUCCESS;
+			}
+		}
+
+		mdelay(30);
+	}
+
+	return CMD_RET_FAILURE;
+}
+
+static int do_r36s_rect(cmd_tbl_t *cmdtp, int flag, int argc,
+			char * const argv[])
+{
+	unsigned long x, y, w, h;
+	unsigned long color;
+	unsigned long xx, yy, x2, y2;
+	struct lcd_fb_bit *fb;
+	struct lcd_fb_bit c;
+
+	if (argc != 6)
+		return CMD_RET_USAGE;
+
+	if (lcd_init())
+		return CMD_RET_FAILURE;
+
+	x = simple_strtoul(argv[1], NULL, 10);
+	y = simple_strtoul(argv[2], NULL, 10);
+	w = simple_strtoul(argv[3], NULL, 10);
+	h = simple_strtoul(argv[4], NULL, 10);
+	color = simple_strtoul(argv[5], NULL, 16);
+
+	c.r = (color >> 16) & 0xff;
+	c.g = (color >> 8) & 0xff;
+	c.b = color & 0xff;
+
+	x2 = x + w;
+	y2 = y + h;
+
+	if (x2 > lcd->w)
+		x2 = lcd->w;
+	if (y2 > lcd->h)
+		y2 = lcd->h;
+
+	for (yy = y; yy < y2; yy++) {
+		fb = (struct lcd_fb_bit *)lcd->drm_fb_mem + yy * lcd->w + x;
+
+		for (xx = x; xx < x2; xx++)
+			*fb++ = c;
+	}
+
+	lcd_sync();
+	return CMD_RET_SUCCESS;
+}
+
+
+
+
+
+
+
+
+/*------------------------MY CODE---------------------------*/
 /*----------------------------------------------------------------------------*/
 /*----------------------------------------------------------------------------*/
 void lcd_sync(void)
@@ -387,52 +517,44 @@ int lcd_gettransp(void)
 	return (lcd != NULL) ? lcd->transp : -1;
 }
 
-/*----------------------------------------------------------------------------*/
-int lcd_setfg_color(const char *color)
+static int lcd_set_color(const char *color, bool fg)
 {
-	if (!strcmp(color ,"red"))
-		lcd_setfg(0xff, 0x00, 0x00);
-	if (!strcmp(color ,"green"))
-		lcd_setfg(0x00, 0xff, 0x00);
-	if (!strcmp(color ,"yellow"))
-		lcd_setfg(0xff, 0xff, 0x00);
-	if (!strcmp(color ,"blue"))
-		lcd_setfg(0x00, 0x00, 0xff);
-	if (!strcmp(color ,"magenta"))
-		lcd_setfg(0xff, 0x00, 0xff);
-	if (!strcmp(color ,"cyan"))
-		lcd_setfg(0x00, 0xff, 0xff);
-	if (!strcmp(color ,"grey"))
-		lcd_setfg(0xaa, 0xaa, 0xaa);
-	if (!strcmp(color ,"black"))
-		lcd_setfg(0x00, 0x00, 0x00);
-	if (!strcmp(color ,"white"))
-		lcd_setfg(0xff, 0xff, 0xff);
-	return 0;
+	unsigned long v;
+
+	if (!strcmp(color, "red"))
+		v = 0xff0000;
+	else if (!strcmp(color, "green"))
+		v = 0x00ff00;
+	else if (!strcmp(color, "yellow"))
+		v = 0xffff00;
+	else if (!strcmp(color, "blue"))
+		v = 0x0000ff;
+	else if (!strcmp(color, "grey"))
+		v = 0xaaaaaa;
+	else if (!strcmp(color, "black"))
+		v = 0x000000;
+	else if (!strcmp(color, "white"))
+		v = 0xffffff;
+	else {
+		if (!strncmp(color, "0x", 2))
+			color += 2;
+		v = simple_strtoul(color, NULL, 16);
+	}
+
+	if (fg)
+		return lcd_setfg((v >> 16) & 0xff, (v >> 8) & 0xff, v & 0xff);
+
+	return lcd_setbg((v >> 16) & 0xff, (v >> 8) & 0xff, v & 0xff);
 }
 
-/*----------------------------------------------------------------------------*/
+int lcd_setfg_color(const char *color)
+{
+	return lcd_set_color(color, true);
+}
+
 int lcd_setbg_color(const char *color)
 {
-	if (!strcmp(color ,"red"))
-		lcd_setbg(0xff, 0x00, 0x00);
-	if (!strcmp(color ,"green"))
-		lcd_setbg(0x00, 0xff, 0x00);
-	if (!strcmp(color ,"yellow"))
-		lcd_setbg(0xff, 0xff, 0x00);
-	if (!strcmp(color ,"blue"))
-		lcd_setbg(0x00, 0x00, 0xff);
-	if (!strcmp(color ,"magenta"))
-		lcd_setbg(0xff, 0x00, 0xff);
-	if (!strcmp(color ,"cyan"))
-		lcd_setbg(0x00, 0xff, 0xff);
-	if (!strcmp(color ,"grey"))
-		lcd_setbg(0xaa, 0xaa, 0xaa);
-	if (!strcmp(color ,"black"))
-		lcd_setbg(0x00, 0x00, 0x00);
-	if (!strcmp(color ,"white"))
-		lcd_setbg(0xff, 0xff, 0xff);
-	return 0;
+	return lcd_set_color(color, false);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -608,6 +730,9 @@ U_BOOT_CMD(
 	"lcd control commands",
 	lcd_help_text
 );
+U_BOOT_CMD(r36s_rect, 6, 0, do_r36s_rect, "", "");
+U_BOOT_CMD(r36s_waitkey, 2, 0, do_r36s_waitkey, "", "");
+
 
 /*----------------------------------------------------------------------------*/
 /*----------------------------------------------------------------------------*/

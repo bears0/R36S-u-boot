@@ -306,12 +306,17 @@ const char *bootdelay_process(void)
 	bootlimit = env_get_ulong("bootlimit", 10, 0);
 #endif /* CONFIG_BOOTCOUNT_LIMIT */
 
-	s = env_get("bootdelay");
-	bootdelay = s ? (int)simple_strtol(s, NULL, 10) : CONFIG_BOOTDELAY;
+        s = env_get("bootdelay");
+        bootdelay = s ? (int)simple_strtol(s, NULL, 10) : CONFIG_BOOTDELAY;
 
 #ifdef CONFIG_OF_CONTROL
-	bootdelay = fdtdec_get_config_int(gd->fdt_blob, "bootdelay",
-			bootdelay);
+        /*
+         * Let a saved environment value override the control FDT.
+         * Only use /config/bootdelay when bootdelay is not set in env.
+         */
+        if (!s)
+            bootdelay = fdtdec_get_config_int(gd->fdt_blob, "bootdelay",
+                    bootdelay);
 #endif
 
 	debug("### main_loop entered: bootdelay=%d\n\n", bootdelay);

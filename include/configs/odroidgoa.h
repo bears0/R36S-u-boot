@@ -59,7 +59,7 @@
 		"stderr=serial,vidconsole\0"
 
 #undef CONFIG_CONSOLE_SCROLL_LINES
-#define CONFIG_CONSOLE_SCROLL_LINES		10
+#define CONFIG_CONSOLE_SCROLL_LINES		1
 #define CONFIG_SUPPORT_EMMC_RPMB
 
 #ifndef CONFIG_SPL_BUILD
@@ -82,12 +82,19 @@
 		"console=ttyFIQ0,115200n8 "				\
 		"rw root=/dev/mmcblk0p2 rootwait rw fsck.repair=yes "	\
 		"net.iframes=0 fbcon=rotate:${lcd_rotate}\0"	\
-	"bootcmd=mmc dev 1; mw.b 0x2000000 0 0x10000; if load mmc 1:1 0x2000000 PanCho.ini; then; source 0x2000000; fi; cfgload; run setbootargs;"	\
+	"bootcmd=mmc dev 1; mw.b 0x2000000 0 0x10000; " \
+		"if load mmc 1:1 0x2000000 R36SMENU.ini; then source 0x2000000; fi; " \
+		"echo R36SMENU.ini missing or returned; " \
+		"sleep 3; " \
+		"poweroff\0"
+
+/*"bootcmd=mmc dev 1; mw.b 0x2000000 0 0x10000; if load mmc 1:1 0x2000000 PanCho.ini; then; source 0x2000000; fi; cfgload; run setbootargs;"	\
 		"load mmc 1:1 0x02000000 Image; "		\
 		"load mmc 1:1 0x01f00000 ${dtb_name}; "	\
 		"booti 0x02000000 - 0x01f00000\0"
+*/
 
 #undef CONFIG_BOOTDELAY
-#define CONFIG_BOOTDELAY	1
+#define CONFIG_BOOTDELAY	5
 
 #endif

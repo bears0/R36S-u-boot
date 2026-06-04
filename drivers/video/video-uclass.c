@@ -5,11 +5,14 @@
  */
 
 #include <common.h>
+#include <command.h>
 #include <dm.h>
+#include <environment.h>
 #include <mapmem.h>
 #include <stdio_dev.h>
 #include <video.h>
 #include <video_console.h>
+#include <console.h>
 #ifdef CONFIG_DRM_ROCKCHIP
 #include <video_rockchip.h>
 #endif
@@ -104,10 +107,38 @@ int video_reserve(ulong *addrp)
 static int video_clear(struct udevice *dev)
 {
 	struct video_priv *priv = dev_get_uclass_priv(dev);
+	int bytes_per_pixel = 0;
+
+	if (priv->xsize > 0 && priv->line_length % priv->xsize == 0)
+		bytes_per_pixel = priv->line_length / priv->xsize;
+
+	/*
+	 * ODROID-GOA / R36S Rockchip path:
+	 *
+	 * video_post_probe() sets:
+	 *     priv->line_length = priv->xsize * 3;
+	 *
+	 * even when priv->bpix may be VIDEO_BPP32.
+	 * So clear 24-bit packed framebuffers explicitly.
+	 */
+	if (bytes_per_pixel == 3) {
+		u8 *p = priv->fb;
+		u8 *end = p + priv->fb_size;
+		u32 colour = priv->colour_bg;
+
+		while (p + 2 < end) {
+			p[0] = colour & 0xff;
+			p[1] = (colour >> 8) & 0xff;
+			p[2] = (colour >> 16) & 0xff;
+			p += 3;
+		}
+
+		return 0;
+	}
 
 	if (priv->bpix == VIDEO_BPP32) {
 		u32 *ppix = priv->fb;
-		u32 *end = priv->fb + priv->fb_size;
+		u32 *end = (u32 *)((u8 *)priv->fb + priv->fb_size);
 
 		while (ppix < end)
 			*ppix++ = priv->colour_bg;
@@ -288,6 +319,51 @@ static int video_post_bind(struct udevice *dev)
 
 	return 0;
 }
+
+static int do_r36s_cls(cmd_tbl_t *cmdtp, int flag, int argc,
+		       char * const argv[])
+{
+	struct udevice *video_dev;
+	struct udevice *con;
+	struct vidconsole_priv *priv;
+	int ret;
+
+	ret = uclass_first_device(UCLASS_VIDEO, &video_dev);
+	if (ret || !video_dev) {
+		printf("cls: no video device\n");
+		return CMD_RET_FAILURE;
+	}
+
+	ret = video_clear(video_dev);
+	if (ret) {
+		printf("cls: video_clear failed: %d\n", ret);
+		return CMD_RET_FAILURE;
+	}
+
+        video_sync(video_dev);
+        
+	/*
+	 * Reset vidconsole cursor.
+	 * This assumes the first UCLASS_VIDEO_CONSOLE device is the active
+	 * vidconsole used by stdout=vidconsole.
+	 */
+	ret = uclass_first_device(UCLASS_VIDEO_CONSOLE, &con);
+	if (!ret && con) {
+		priv = dev_get_uclass_priv(con);
+
+		priv->xcur_frac = priv->xstart_frac;
+                priv->ycur = 0;
+                priv->last_ch = 0;
+	}
+
+	return CMD_RET_SUCCESS;
+}
+
+U_BOOT_CMD(
+	cls, 1, 1, do_r36s_cls,
+	"clear screen",
+	""
+);
 
 UCLASS_DRIVER(video) = {
 	.id		= UCLASS_VIDEO,

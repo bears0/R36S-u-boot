@@ -1046,7 +1046,10 @@ void rockchip_show_fbbase(ulong fbbase)
 		if (!strcmp(env_get("hwrev"), "v10-go3")) {
 			s->logo.width = 480;
 			s->logo.height = 854;
-		} else {
+		} else if(!strcmp(env_get("hwrev"), "rg351mp")){
+	                s->logo.width = 640;
+		        s->logo.height = 480;
+	        } else {
 			s->logo.width = 320;
 			s->logo.height = 480;
 		}
@@ -1421,6 +1424,9 @@ static int rockchip_display_probe(struct udevice *dev)
 	if (!strcmp(env_get("hwrev"), "v10-go3")) {
 		uc_priv->xsize = 480;
 		uc_priv->ysize = 854;
+	} else if(!strcmp(env_get("hwrev"), "rg351mp")){
+	        uc_priv->xsize = 640;
+		uc_priv->ysize = 480;
 	} else {
 		uc_priv->xsize = 320;
 		uc_priv->ysize = 480;

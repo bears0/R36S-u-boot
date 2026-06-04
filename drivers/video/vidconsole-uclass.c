@@ -9,10 +9,12 @@
  */
 
 #include <common.h>
+#include <command.h>
 #include <dm.h>
 #include <video.h>
 #include <video_console.h>
 #include <video_font.h>		/* Get font data, width and height */
+#include <asm/io.h>
 
 /* By default we scroll by a single line */
 #ifndef CONFIG_CONSOLE_SCROLL_LINES

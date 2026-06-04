@@ -21,6 +21,7 @@ CONFIG_SYS_SOC="rockchip"
 CONFIG_SYS_VENDOR="rockchip"
 CONFIG_SYS_BOARD="odroidgoa"
 CONFIG_SYS_CONFIG_NAME="odroidgoa"
+CONFIG_CMD_CLS=y
 
 #
 # ARM architecture
@@ -412,7 +413,7 @@ CONFIG_TPL_SERIAL_SUPPORT=y
 #
 CONFIG_CMDLINE=y
 CONFIG_HUSH_PARSER=y
-CONFIG_SYS_PROMPT="r36s=> "
+CONFIG_SYS_PROMPT=""
 
 #
 # Autoboot options

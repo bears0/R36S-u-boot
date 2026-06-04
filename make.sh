@@ -10,6 +10,16 @@ BOARD=$1
 SUBCMD=$1
 FUNCADDR=$1
 FILE=$2
+
+USE_EXISTING_ODROIDGOA=0
+
+if [[ "${BOARD}" == "odroidgoa-current" ]]; then
+    BOARD=""
+    SUBCMD=""
+    FUNCADDR=""
+    USE_EXISTING_ODROIDGOA=1
+fi
+
 JOB=`sed -n "N;/processor/p" /proc/cpuinfo|wc -l`
 SUPPORT_LIST=`ls configs/*[r,p][x,v,k][0-9][0-9]*_defconfig`
 
@@ -29,7 +39,7 @@ RKCHIP_INI_DESC=("CONFIG_TARGET_GVA_RK3229       NA          RK322XAT     NA"
 ########################################### User can modify #############################################
 # User's rkbin tool relative path
 # if [[ "${BOARD}" == "odroidgo"* ]]; then
-if [[ "${BOARD}" == "odroidgoa"* ]]; then
+if [[ "${BOARD}" == "odroidgoa"* || "${USE_EXISTING_ODROIDGOA}" == "1" ]]; then
 RKBIN_TOOLS=./tools/rk_tools/tools
 else
 RKBIN_TOOLS=../rkbin/tools
@@ -77,6 +87,10 @@ PLATFORM_TRUST_IMG_SIZE=
 
 # Out env param
 PACK_IGNORE_BL32=$TRUST_PACK_IGNORE_BL32	# Value only: "--ignore-bl32"
+
+
+UBOOT_KB=0
+UBOOT_MAX_KB=0
 #########################################################################################################
 help()
 {
@@ -555,7 +569,7 @@ debug_command()
 
 pack_uboot_image()
 {
-	local UBOOT_LOAD_ADDR UBOOT_MAX_KB UBOOT_KB HEAD_KB=2
+	local UBOOT_LOAD_ADDR HEAD_KB=2
 
 	# Check file size
 	UBOOT_KB=`ls -l u-boot.bin | awk '{print $5}'`
@@ -567,8 +581,10 @@ pack_uboot_image()
 	fi
 
 	if [ $UBOOT_KB -gt $UBOOT_MAX_KB ]; then
+		OVER_BYTES=$((UBOOT_KB - UBOOT_MAX_KB))
 		echo
 		echo "ERROR: pack uboot failed! u-boot.bin actual: $UBOOT_KB bytes, max limit: $UBOOT_MAX_KB bytes"
+		echo "Over limit by: $OVER_BYTES bytes"
 		exit 1
 	fi
 
@@ -836,8 +852,12 @@ finish()
 	echo
 	if [ "$BOARD" = '' ]; then
 		echo "Platform ${RKCHIP_LABEL} is build OK, with exist .config"
+		REMAINING_BYTES=$((UBOOT_MAX_KB - UBOOT_KB))
+		echo "U-Boot size margin: $REMAINING_BYTES bytes"
 	else
 		echo "Platform ${RKCHIP_LABEL} is build OK, with new .config(make ${BOARD}_defconfig)"
+		REMAINING_BYTES=$((UBOOT_MAX_KB - UBOOT_KB))
+		echo "U-Boot size margin: $REMAINING_BYTES bytes"
 	fi
 }
 
@@ -851,7 +871,7 @@ pack_uboot_image
 pack_loader_image
 pack_trust_image
 # if [ "${BOARD}" = 'odroidgo2' -o "${BOARD}" = 'odroidgo3' ]; then
-if [ "${BOARD}" = 'odroidgoa' ]; then
-pack_idbloader
+if [ "${BOARD}" = 'odroidgoa' ] || [ "${USE_EXISTING_ODROIDGOA}" = "1" ]; then
+    pack_idbloader
 fi
 finish
