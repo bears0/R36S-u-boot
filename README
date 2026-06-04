@@ -10,7 +10,7 @@ I have an R36S V22 with Panel 4. I don't have any others to test.
 
 My next plan is to implement automatic OS detection, but that may be overkill since adding images to the SD card may take more skill than adding them to the menu manually.
 
-
+I will also be using this to create a dual-boot Armbian and dArkOSRE image.
 
 
 
